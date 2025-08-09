@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useExpenses } from '../contexts/ExpenseContext';
-import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+// MUI X Charts
+import { BarChart } from '@mui/x-charts/BarChart';
+import { ChartsTooltip } from '@mui/x-charts/ChartsTooltip';
+import { ChartsGrid } from '@mui/x-charts/ChartsGrid';
 import { 
   DollarSign, 
   TrendingUp, 
@@ -19,12 +22,29 @@ const COLORS = [
 
 const Dashboard = () => {
   const { summary, fetchSummary, expenses } = useExpenses();
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  // Persist month/year in localStorage so navigating away and back restores selection
+  const readPersisted = (key, fallback) => {
+    try {
+      const v = localStorage.getItem(key);
+      return v ? parseInt(v, 10) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+  const [selectedMonth, setSelectedMonth] = useState(() => readPersisted('dash_month', new Date().getMonth() + 1));
+  const [selectedYear, setSelectedYear] = useState(() => readPersisted('dash_year', new Date().getFullYear()));
+  const [isAllTime, setIsAllTime] = useState(false);
+  const [prevSelection, setPrevSelection] = useState({ month: selectedMonth, year: selectedYear });
 
   useEffect(() => {
-    fetchSummary(selectedMonth, selectedYear);
-  }, [selectedMonth, selectedYear, fetchSummary]);
+    if (isAllTime) {
+      fetchSummary(null, undefined);
+    } else {
+      localStorage.setItem('dash_month', String(selectedMonth));
+      localStorage.setItem('dash_year', String(selectedYear));
+      fetchSummary(selectedMonth, selectedYear);
+    }
+  }, [isAllTime, selectedMonth, selectedYear, fetchSummary]);
 
   // Calculate total spending
   const totalSpending = summary.categories.reduce((sum, item) => sum + item.total, 0);
@@ -62,11 +82,12 @@ const Dashboard = () => {
             Track your spending and get AI-powered insights
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex space-x-2">
+        <div className="mt-4 sm:mt-0 flex flex-wrap items-center gap-2">
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
             className="input w-32"
+            disabled={isAllTime}
           >
             {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
               <option key={month} value={month}>
@@ -78,11 +99,42 @@ const Dashboard = () => {
             value={selectedYear}
             onChange={(e) => setSelectedYear(parseInt(e.target.value))}
             className="input w-24"
+            disabled={isAllTime}
           >
             {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (
               <option key={year} value={year}>{year}</option>
             ))}
           </select>
+
+          {!isAllTime ? (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setPrevSelection({ month: selectedMonth, year: selectedYear });
+                setIsAllTime(true);
+              }}
+            >
+              All time
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="badge badge-primary">All time</span>
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => {
+                  setIsAllTime(false);
+                  setSelectedMonth(prevSelection.month);
+                  setSelectedYear(prevSelection.year);
+                }}
+                aria-label="Cancel all time"
+                title="Cancel all time"
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -157,69 +209,37 @@ const Dashboard = () => {
       </div>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        {/* Spending by Category Pie Chart */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* Category Bars (Selected Month or All Time) */}
         <div className="card">
           <div className="card-header">
-            <h3 className="text-lg font-semibold text-gray-900">Spending by Category</h3>
+            <h3 className="text-lg font-semibold text-gray-900">
+              {isAllTime ? 'Spending by Category — All Time' : `Spending by Category — ${formatMonth(selectedMonth)} ${selectedYear}`}
+            </h3>
           </div>
           <div className="card-body">
             {summary.categories.length > 0 ? (
               <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={summary.categories}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="total"
-                    >
-                      {summary.categories.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip 
-                      formatter={(value) => [formatCurrency(value), 'Amount']}
-                      labelFormatter={(label) => `Category: ${label}`}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="flex h-80 items-center justify-center">
-                <p className="text-gray-500">No data available</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Monthly Trends Bar Chart */}
-        <div className="card">
-          <div className="card-header">
-            <h3 className="text-lg font-semibold text-gray-900">Monthly Spending Trends</h3>
-          </div>
-          <div className="card-body">
-            {summary.trends.length > 0 ? (
-              <div className="h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={summary.trends}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis 
-                      dataKey="_id" 
-                      tickFormatter={(value) => `${value.month}/${value.year}`}
-                    />
-                    <YAxis tickFormatter={(value) => `$${value}`} />
-                    <Tooltip 
-                      formatter={(value) => [formatCurrency(value), 'Total']}
-                      labelFormatter={(label) => `Month: ${label.month}/${label.year}`}
-                    />
-                    <Bar dataKey="total" fill="#3b82f6" />
-                  </BarChart>
-                </ResponsiveContainer>
+                <BarChart
+                  height={320}
+                  xAxis={[{
+                    scaleType: 'band',
+                    data: summary.categories.map((c) => c._id),
+                    colorMap: {
+                      type: 'ordinal',
+                      values: summary.categories.map((c) => c._id),
+                      colors: summary.categories.map((_, i) => COLORS[i % COLORS.length])
+                    }
+                  }]}
+                  series={[{
+                    data: summary.categories.map((c) => c.total),
+                    label: 'Total',
+                  }]}
+                  grid={{ vertical: true, horizontal: true }}
+                >
+                  <ChartsGrid />
+                  <ChartsTooltip />
+                </BarChart>
               </div>
             ) : (
               <div className="flex h-80 items-center justify-center">

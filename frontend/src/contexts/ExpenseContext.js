@@ -169,16 +169,25 @@ export const ExpenseProvider = ({ children }) => {
   };
 
   // Fetch summary data
-  const fetchSummary = async (month = null, year = 2024) => {
+  const fetchSummary = async (month = null, year = undefined) => {
     try {
       const params = new URLSearchParams();
-      if (month) params.append('month', month);
-      params.append('year', year);
-      
-      const [categoriesResponse, trendsResponse] = await Promise.all([
-        axios.get(`${API_BASE}/expenses/summary/categories?${params}`),
-        axios.get(`${API_BASE}/expenses/summary/trends?year=${year}`)
-      ]);
+      if (month) params.append('month', String(month));
+      if (typeof year === 'number' && !Number.isNaN(year)) {
+        params.append('year', String(year));
+      }
+
+      const requests = [
+        axios.get(`${API_BASE}/expenses/summary/categories?${params.toString()}`),
+      ];
+      if (typeof year === 'number' && !Number.isNaN(year)) {
+        requests.push(axios.get(`${API_BASE}/expenses/summary/trends?year=${year}`));
+      } else {
+        // If no year, return empty trends
+        requests.push(Promise.resolve({ data: [] }));
+      }
+
+      const [categoriesResponse, trendsResponse] = await Promise.all(requests);
 
       dispatch({
         type: 'SET_SUMMARY',
