@@ -1,0 +1,142 @@
+[
+  {
+    "amount": 4.50,
+    "description": "Coffee at Starbucks",
+    "date": "2024-01-15T08:30:00.000Z",
+    "merchant": "Starbucks",
+    "category": "Food & Dining"
+  },
+  {
+    "amount": 25.99,
+    "description": "Lunch at Chipotle",
+    "date": "2024-01-15T12:15:00.000Z",
+    "merchant": "Chipotle",
+    "category": "Food & Dining"
+  },
+  {
+    "amount": 45.00,
+    "description": "Uber ride to airport",
+    "date": "2024-01-16T06:00:00.000Z",
+    "merchant": "Uber",
+    "category": "Transportation"
+  },
+  {
+    "amount": 89.99,
+    "description": "Amazon purchase - headphones",
+    "date": "2024-01-16T14:20:00.000Z",
+    "merchant": "Amazon",
+    "category": "Shopping"
+  },
+  {
+    "amount": 15.99,
+    "description": "Netflix subscription",
+    "date": "2024-01-17T00:00:00.000Z",
+    "merchant": "Netflix",
+    "category": "Entertainment"
+  },
+  {
+    "amount": 120.00,
+    "description": "Doctor visit",
+    "date": "2024-01-17T10:00:00.000Z",
+    "merchant": "Medical Center",
+    "category": "Healthcare"
+  },
+  {
+    "amount": 85.50,
+    "description": "Electric bill",
+    "date": "2024-01-18T00:00:00.000Z",
+    "merchant": "Power Company",
+    "category": "Utilities"
+  },
+  {
+    "amount": 1200.00,
+    "description": "Rent payment",
+    "date": "2024-01-19T00:00:00.000Z",
+    "merchant": "Property Management",
+    "category": "Housing"
+  },
+  {
+    "amount": 150.00,
+    "description": "Online course - React Development",
+    "date": "2024-01-20T16:30:00.000Z",
+    "merchant": "Udemy",
+    "category": "Education"
+  },
+  {
+    "amount": 350.00,
+    "description": "Flight tickets to New York",
+    "date": "2024-01-21T09:15:00.000Z",
+    "merchant": "Delta Airlines",
+    "category": "Travel"
+  },
+  {
+    "amount": 65.00,
+    "description": "Hair salon appointment",
+    "date": "2024-01-22T14:00:00.000Z",
+    "merchant": "Beauty Salon",
+    "category": "Personal Care"
+  },
+  {
+    "amount": 180.00,
+    "description": "Car insurance premium",
+    "date": "2024-01-23T00:00:00.000Z",
+    "merchant": "State Farm",
+    "category": "Insurance"
+  },
+  {
+    "amount": 500.00,
+    "description": "Stock purchase - AAPL",
+    "date": "2024-01-24T11:45:00.000Z",
+    "merchant": "Robinhood",
+    "category": "Investments"
+  },
+  {
+    "amount": 12.99,
+    "description": "Pizza delivery",
+    "date": "2024-01-25T19:30:00.000Z",
+    "merchant": "Domino's",
+    "category": "Food & Dining"
+  },
+  {
+    "amount": 35.00,
+    "description": "Gas station fill up",
+    "date": "2024-01-26T08:45:00.000Z",
+    "merchant": "Shell",
+    "category": "Transportation"
+  },
+  {
+    "amount": 75.00,
+    "description": "Movie theater tickets",
+    "date": "2024-01-26T20:00:00.000Z",
+    "merchant": "AMC Theaters",
+    "category": "Entertainment"
+  },
+  {
+    "amount": 45.00,
+    "description": "Grocery shopping at Walmart",
+    "date": "2024-01-27T10:30:00.000Z",
+    "merchant": "Walmart",
+    "category": "Food & Dining"
+  },
+  {
+    "amount": 25.00,
+    "description": "Gym membership",
+    "date": "2024-01-28T00:00:00.000Z",
+    "merchant": "Planet Fitness",
+    "category": "Entertainment"
+  },
+  {
+    "amount": 95.00,
+    "description": "Dentist appointment",
+    "date": "2024-01-29T13:00:00.000Z",
+    "merchant": "Dental Care",
+    "category": "Healthcare"
+  },
+  {
+    "amount": 200.00,
+    "description": "Home improvement supplies",
+    "date": "2024-01-30T15:20:00.000Z",
+    "merchant": "Home Depot",
+    "category": "Housing"
+  }
+]
