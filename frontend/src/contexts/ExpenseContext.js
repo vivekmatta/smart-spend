@@ -367,8 +367,7 @@ export const ExpenseProvider = ({ children }) => {
   const fetchSummary = async (month = null, year = undefined) => {
     try {
       // Load matching expenses, then aggregate client-side
-      const userId = 'default-user';
-      const constraints = [where('userId', '==', userId)];
+      const constraints = [where('userId', '==', currentUserId)];
       if (year) {
         if (month) {
           const start = new Date(year, month - 1, 1);
@@ -382,7 +381,7 @@ export const ExpenseProvider = ({ children }) => {
           constraints.push(where('date', '<=', end));
         }
       }
-      const q = fsQuery(collection(db, 'expenses'), ...constraints);
+      const q = fsQuery(collection(db, 'expenses'), ...constraints, orderBy('date', 'desc'));
       const snap = await getDocs(q);
       const rows = snap.docs.map(d => ({ _id: d.id, ...d.data() }));
 
