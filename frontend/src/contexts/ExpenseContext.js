@@ -1,5 +1,17 @@
 import React, { createContext, useContext, useReducer, useEffect, useCallback } from 'react';
-import axios from 'axios';
+import { db } from '../firebase';
+import {
+  collection,
+  query as fsQuery,
+  where,
+  orderBy,
+  getDocs,
+  addDoc,
+  doc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+} from 'firebase/firestore';
 import toast from 'react-hot-toast';
 
 const ExpenseContext = createContext();
@@ -92,44 +104,82 @@ const expenseReducer = (state, action) => {
 export const ExpenseProvider = ({ children }) => {
   const [state, dispatch] = useReducer(expenseReducer, initialState);
 
-  // API base URL
-  const API_BASE = '/api';
-
   // Fetch expenses with filters (memoized to keep stable identity)
   const fetchExpenses = useCallback(
     async (filters, page = 1) => {
       try {
         dispatch({ type: 'SET_LOADING', payload: true });
 
-        const params = new URLSearchParams();
-        params.append('page', String(page));
-        params.append('limit', String(state.pagination.itemsPerPage));
+        const itemsPerPage = state.pagination.itemsPerPage;
+        const userId = 'default-user';
 
-        if (filters?.year) params.append('year', String(filters.year));
-        if (filters?.month) params.append('month', String(filters.month));
-        if (filters?.category) params.append('category', String(filters.category));
-        if (filters?.merchant) params.append('merchant', String(filters.merchant));
+        const constraints = [where('userId', '==', userId)];
+        // Date range
+        if (filters?.year) {
+          const year = Number(filters.year);
+          const month = filters?.month ? Number(filters.month) : null;
+          if (month) {
+            const start = new Date(year, month - 1, 1);
+            const end = new Date(year, month, 0, 23, 59, 59, 999);
+            constraints.push(where('date', '>=', start));
+            constraints.push(where('date', '<=', end));
+          } else {
+            const start = new Date(year, 0, 1);
+            const end = new Date(year, 11, 31, 23, 59, 59, 999);
+            constraints.push(where('date', '>=', start));
+            constraints.push(where('date', '<=', end));
+          }
+        }
+        if (filters?.category) constraints.push(where('category', '==', filters.category));
+        if (filters?.merchant) constraints.push(where('merchant', '>=', filters.merchant), where('merchant', '<=', filters.merchant + '\uf8ff'));
 
-        const response = await axios.get(`${API_BASE}/expenses?${params}`);
-        dispatch({ type: 'SET_EXPENSES', payload: response.data });
+        const q = fsQuery(collection(db, 'expenses'), ...constraints, orderBy('date', 'desc'));
+        const snap = await getDocs(q);
+        const all = snap.docs.map(d => ({ _id: d.id, ...d.data() }));
+
+        // Client-side pagination for simplicity
+        const totalItems = all.length;
+        const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+        const startIdx = (page - 1) * itemsPerPage;
+        const pageItems = all.slice(startIdx, startIdx + itemsPerPage);
+
+        dispatch({
+          type: 'SET_EXPENSES',
+          payload: {
+            expenses: pageItems,
+            pagination: { currentPage: page, totalPages, totalItems, itemsPerPage },
+          },
+        });
       } catch (error) {
         dispatch({ type: 'SET_ERROR', payload: 'Failed to fetch expenses' });
         toast.error('Failed to fetch expenses');
       }
     },
     // Keep dependencies minimal so the function identity is stable across renders
-    [API_BASE, state.pagination.itemsPerPage]
+    [state.pagination.itemsPerPage]
   );
 
   // Add new expense
   const addExpense = async (expenseData) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      
-      const response = await axios.post(`${API_BASE}/expenses`, expenseData);
-      dispatch({ type: 'ADD_EXPENSE', payload: response.data });
+
+      const payload = {
+        amount: Number(expenseData.amount),
+        description: expenseData.description,
+        date: new Date(expenseData.date || Date.now()),
+        merchant: expenseData.merchant,
+        category: expenseData.category,
+        userId: 'default-user',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      const ref = await addDoc(collection(db, 'expenses'), payload);
+      const created = { _id: ref.id, ...payload };
+      dispatch({ type: 'ADD_EXPENSE', payload: created });
       toast.success('Expense added successfully!');
-      return response.data;
+      return created;
     } catch (error) {
       dispatch({ type: 'SET_ERROR', payload: 'Failed to add expense' });
       toast.error('Failed to add expense');
@@ -141,11 +191,21 @@ export const ExpenseProvider = ({ children }) => {
   const updateExpense = async (id, expenseData) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      
-      const response = await axios.put(`${API_BASE}/expenses/${id}`, expenseData);
-      dispatch({ type: 'UPDATE_EXPENSE', payload: response.data });
+
+      const ref = doc(db, 'expenses', id);
+      const payload = {
+        ...expenseData,
+        amount: expenseData.amount !== undefined ? Number(expenseData.amount) : undefined,
+        date: expenseData.date ? new Date(expenseData.date) : undefined,
+        updatedAt: serverTimestamp(),
+      };
+      // Remove undefined fields
+      Object.keys(payload).forEach((k) => payload[k] === undefined && delete payload[k]);
+      await updateDoc(ref, payload);
+      const merged = { _id: id, ...expenseData };
+      dispatch({ type: 'UPDATE_EXPENSE', payload: merged });
       toast.success('Expense updated successfully!');
-      return response.data;
+      return merged;
     } catch (error) {
       dispatch({ type: 'SET_ERROR', payload: 'Failed to update expense' });
       toast.error('Failed to update expense');
@@ -157,8 +217,7 @@ export const ExpenseProvider = ({ children }) => {
   const deleteExpense = async (id) => {
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
-      
-      await axios.delete(`${API_BASE}/expenses/${id}`);
+      await deleteDoc(doc(db, 'expenses', id));
       dispatch({ type: 'DELETE_EXPENSE', payload: id });
       toast.success('Expense deleted successfully!');
     } catch (error) {
@@ -171,31 +230,54 @@ export const ExpenseProvider = ({ children }) => {
   // Fetch summary data
   const fetchSummary = async (month = null, year = undefined) => {
     try {
-      const params = new URLSearchParams();
-      if (month) params.append('month', String(month));
-      if (typeof year === 'number' && !Number.isNaN(year)) {
-        params.append('year', String(year));
-      }
-
-      const requests = [
-        axios.get(`${API_BASE}/expenses/summary/categories?${params.toString()}`),
-      ];
-      if (typeof year === 'number' && !Number.isNaN(year)) {
-        requests.push(axios.get(`${API_BASE}/expenses/summary/trends?year=${year}`));
-      } else {
-        // If no year, return empty trends
-        requests.push(Promise.resolve({ data: [] }));
-      }
-
-      const [categoriesResponse, trendsResponse] = await Promise.all(requests);
-
-      dispatch({
-        type: 'SET_SUMMARY',
-        payload: {
-          categories: categoriesResponse.data,
-          trends: trendsResponse.data
+      // Load matching expenses, then aggregate client-side
+      const userId = 'default-user';
+      const constraints = [where('userId', '==', userId)];
+      if (year) {
+        if (month) {
+          const start = new Date(year, month - 1, 1);
+          const end = new Date(year, month, 0, 23, 59, 59, 999);
+          constraints.push(where('date', '>=', start));
+          constraints.push(where('date', '<=', end));
+        } else {
+          const start = new Date(year, 0, 1);
+          const end = new Date(year, 11, 31, 23, 59, 59, 999);
+          constraints.push(where('date', '>=', start));
+          constraints.push(where('date', '<=', end));
         }
+      }
+      const q = fsQuery(collection(db, 'expenses'), ...constraints);
+      const snap = await getDocs(q);
+      const rows = snap.docs.map(d => ({ _id: d.id, ...d.data() }));
+
+      // Categories aggregation
+      const byCatMap = new Map();
+      rows.forEach(r => {
+        const key = r.category || 'Other';
+        const prev = byCatMap.get(key) || { _id: key, total: 0, count: 0 };
+        prev.total += Number(r.amount || 0);
+        prev.count += 1;
+        byCatMap.set(key, prev);
       });
+      const categories = Array.from(byCatMap.values()).sort((a,b) => b.total - a.total);
+
+      // Trends (if year provided)
+      let trends = [];
+      if (year) {
+        const byMonth = new Map();
+        rows.forEach(r => {
+          const d = r.date instanceof Date ? r.date : new Date(r.date?.seconds ? r.date.seconds * 1000 : r.date);
+          const m = d.getMonth()+1;
+          const key = `${year}-${m}`;
+          const prev = byMonth.get(key) || { _id: { year, month: m }, total: 0, count: 0 };
+          prev.total += Number(r.amount || 0);
+          prev.count += 1;
+          byMonth.set(key, prev);
+        });
+        trends = Array.from(byMonth.values()).sort((a,b) => a._id.month - b._id.month);
+      }
+
+      dispatch({ type: 'SET_SUMMARY', payload: { categories, trends } });
     } catch (error) {
       console.error('Failed to fetch summary:', error);
     }
@@ -203,13 +285,22 @@ export const ExpenseProvider = ({ children }) => {
 
   // Categorize expense description
   const categorizeExpense = async (description) => {
-    try {
-      const response = await axios.post(`${API_BASE}/categorize`, { description });
-      return response.data.data;
-    } catch (error) {
-      console.error('Failed to categorize:', error);
-      return { category: 'Other', confidence: 0 };
+    // Simple client-side heuristic since backend is removed
+    const text = (description || '').toLowerCase();
+    const pairs = [
+      ['Food & Dining', ['restaurant','pizza','cafe','chipotle','starbucks']],
+      ['Transportation', ['uber','lyft','shell','gas','metro']],
+      ['Entertainment', ['movie','netflix','spotify','amc']],
+      ['Shopping', ['amazon','walmart','target']],
+      ['Healthcare', ['pharmacy','doctor','clinic']],
+      ['Utilities', ['electric','water','utility','internet']],
+      ['Housing', ['rent','mortgage','home']],
+      ['Travel', ['airlines','hotel','delta','flight']],
+    ];
+    for (const [cat, words] of pairs) {
+      if (words.some(w => text.includes(w))) return { category: cat, confidence: 0.7 };
     }
+    return { category: 'Other', confidence: 0.3 };
   };
 
   // Set filters
