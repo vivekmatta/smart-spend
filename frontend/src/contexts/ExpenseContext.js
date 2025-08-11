@@ -7,6 +7,7 @@ import {
   orderBy,
   getDocs,
   addDoc,
+  setDoc,
   doc,
   updateDoc,
   deleteDoc,
@@ -227,6 +228,127 @@ export const ExpenseProvider = ({ children }) => {
     }
   };
 
+  // --- Subscriptions ---
+  const addSubscription = async (subData) => {
+    const now = new Date();
+    const start = subData.subStartDate ? new Date(subData.subStartDate) : now;
+    const interval = subData.interval || 'monthly'; // 'monthly' | 'weekly' | 'yearly'
+    const dayOfMonth = Number(subData.subDayOfMonth) || start.getDate();
+
+    // Compute first nextChargeAt based on interval
+    let nextChargeAt = new Date(start);
+    if (interval === 'monthly') {
+      // Clamp to chosen day in the month of start
+      const year = start.getFullYear();
+      const monthIdx = start.getMonth();
+      const last = new Date(year, monthIdx + 1, 0).getDate();
+      const day = Math.min(dayOfMonth, last);
+      nextChargeAt = new Date(year, monthIdx, day);
+      // If that day already passed earlier today, roll to next month
+      if (nextChargeAt < now) {
+        const nextMonthLast = new Date(year, monthIdx + 2, 0).getDate();
+        const nextDay = Math.min(dayOfMonth, nextMonthLast);
+        nextChargeAt = new Date(year, monthIdx + 1, nextDay);
+      }
+    } else if (interval === 'yearly') {
+      const year = start.getFullYear();
+      const monthIdx = start.getMonth();
+      const last = new Date(year, monthIdx + 1, 0).getDate();
+      const day = Math.min(dayOfMonth, last);
+      nextChargeAt = new Date(year, monthIdx, day);
+      if (nextChargeAt < now) {
+        const nextYearLast = new Date(year + 1, monthIdx + 1, 0).getDate();
+        const nextDay = Math.min(dayOfMonth, nextYearLast);
+        nextChargeAt = new Date(year + 1, monthIdx, nextDay);
+      }
+    } else if (interval === 'weekly') {
+      // If in the past, roll forward to the next 7-day boundary
+      while (nextChargeAt < now) {
+        nextChargeAt = new Date(nextChargeAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+      }
+    }
+
+    const payload = {
+      userId: 'default-user',
+      merchant: subData.merchant,
+      amount: Number(subData.amount),
+      category: subData.category,
+      interval,
+      dayOfMonth,
+      startDate: start,
+      nextChargeAt,
+      active: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+    await addDoc(collection(db, 'subscriptions'), payload);
+    toast.success('Subscription created');
+  };
+
+  const cancelSubscription = async (id) => {
+    await updateDoc(doc(db, 'subscriptions', id), { active: false, updatedAt: serverTimestamp() });
+    toast.success('Subscription cancelled');
+  };
+
+  const runSubscriptionGenerator = async () => {
+    try {
+      const now = new Date();
+      const q = fsQuery(
+        collection(db, 'subscriptions'),
+        where('active', '==', true),
+        where('nextChargeAt', '<=', now),
+        orderBy('nextChargeAt', 'asc')
+      );
+      const snap = await getDocs(q);
+      const subs = snap.docs.map(d => ({ _id: d.id, ...d.data() }));
+      for (const sub of subs) {
+        // Process multiple periods if needed
+        let iterNext = sub.nextChargeAt instanceof Date ? sub.nextChargeAt : new Date(sub.nextChargeAt.seconds ? sub.nextChargeAt.seconds * 1000 : sub.nextChargeAt);
+        const dayOfMonth = sub.dayOfMonth || new Date(iterNext).getDate();
+        const interval = sub.interval || 'monthly';
+        while (iterNext <= now) {
+          const iso = new Date(iterNext).toISOString().slice(0,10); // YYYY-MM-DD
+          const expenseId = `${sub._id}_${iso}`;
+          const expenseData = {
+            _id: expenseId,
+            subscriptionId: sub._id,
+            generated: true,
+            period: iso,
+            userId: 'default-user',
+            merchant: sub.merchant,
+            amount: Number(sub.amount || 0),
+            category: sub.category || 'Other',
+            date: iterNext,
+            description: `Subscription: ${sub.merchant}`,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          await setDoc(doc(db, 'expenses', expenseId), expenseData, { merge: false }).catch(() => {});
+
+          // Advance next date
+          if (interval === 'weekly') {
+            iterNext = new Date(iterNext.getTime() + 7 * 24 * 60 * 60 * 1000);
+          } else if (interval === 'yearly') {
+            const y = iterNext.getFullYear();
+            const m = iterNext.getMonth();
+            const last = new Date(y + 1, m + 1, 0).getDate();
+            const day = Math.min(dayOfMonth, last);
+            iterNext = new Date(y + 1, m, day);
+          } else { // monthly default
+            const y = iterNext.getFullYear();
+            const m = iterNext.getMonth();
+            const last = new Date(y, m + 2, 0).getDate();
+            const day = Math.min(dayOfMonth, last);
+            iterNext = new Date(y, m + 1, day);
+          }
+        }
+        await updateDoc(doc(db, 'subscriptions', sub._id), { nextChargeAt: iterNext, updatedAt: serverTimestamp() });
+      }
+    } catch (e) {
+      console.error('Subscription generator failed', e);
+    }
+  };
+
   // Fetch summary data
   const fetchSummary = async (month = null, year = undefined) => {
     try {
@@ -311,7 +433,8 @@ export const ExpenseProvider = ({ children }) => {
   // Remove duplicate initial fetch here; the `Expenses` page controls fetching
   // to avoid double requests and dependency loops.
   useEffect(() => {
-    // No-op; kept for potential future initialization
+    // Run subscription generator once per load
+    runSubscriptionGenerator();
   }, []);
 
   const value = {
@@ -320,6 +443,9 @@ export const ExpenseProvider = ({ children }) => {
     addExpense,
     updateExpense,
     deleteExpense,
+    addSubscription,
+    cancelSubscription,
+    runSubscriptionGenerator,
     fetchSummary,
     categorizeExpense,
     setFilters,

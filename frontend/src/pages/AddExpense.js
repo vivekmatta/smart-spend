@@ -15,7 +15,7 @@ import { format } from 'date-fns';
 
 const AddExpense = () => {
   const navigate = useNavigate();
-  const { addExpense, categorizeExpense } = useExpenses();
+  const { addExpense, addSubscription, categorizeExpense } = useExpenses();
   const [isCategorizing, setIsCategorizing] = useState(false);
   const [categorizedCategory, setCategorizedCategory] = useState('');
   const [categorizationConfidence, setCategorizationConfidence] = useState(0);
@@ -69,11 +69,23 @@ const AddExpense = () => {
 
   const onSubmit = async (data) => {
     try {
-      await addExpense({
-        ...data,
-        amount: parseFloat(data.amount),
-        date: new Date(data.date)
-      });
+      if (data.isSubscription) {
+        await addSubscription({
+          amount: parseFloat(data.amount),
+          description: data.description,
+          merchant: data.merchant,
+          category: data.category,
+          subDayOfMonth: data.subDayOfMonth,
+          subStartDate: data.subStartDate,
+          interval: data.interval,
+        });
+      } else {
+        await addExpense({
+          ...data,
+          amount: parseFloat(data.amount),
+          date: new Date(data.date)
+        });
+      }
       navigate('/expenses');
     } catch (error) {
       console.error('Failed to add expense:', error);
@@ -256,6 +268,35 @@ const AddExpense = () => {
               </div>
               {errors.date && (
                 <p className="mt-1 text-sm text-danger-600">{errors.date.message}</p>
+              )}
+            </div>
+
+            {/* Subscription Options */}
+            <div className="border-t pt-4">
+              <label className="flex items-center space-x-2">
+                <input type="checkbox" {...register('isSubscription')} />
+                <span className="text-sm text-gray-700">Make this a subscription</span>
+              </label>
+
+              {watch('isSubscription') && (
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Interval</label>
+                    <select className="input" defaultValue="monthly" {...register('interval')}> 
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                      <option value="yearly">Yearly</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Day of month</label>
+                    <input type="number" min="1" max="31" className="input" defaultValue={new Date().getDate()} {...register('subDayOfMonth')} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Start date</label>
+                    <input type="date" className="input" defaultValue={format(new Date(), 'yyyy-MM-dd')} {...register('subStartDate')} />
+                  </div>
+                </div>
               )}
             </div>
 
