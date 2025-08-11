@@ -79,6 +79,14 @@ const AddExpense = () => {
           subStartDate: data.subStartDate,
           interval: data.interval,
         });
+        // Also save an immediate expense for today so user sees it instantly
+        await addExpense({
+          amount: parseFloat(data.amount),
+          description: `${data.description} (first charge)`,
+          merchant: data.merchant,
+          category: data.category,
+          date: new Date(),
+        });
       } else {
         await addExpense({
           ...data,

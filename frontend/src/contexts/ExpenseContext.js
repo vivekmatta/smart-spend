@@ -23,7 +23,7 @@ const initialState = {
   error: null,
   filters: {
     month: null,
-    year: 2024,
+    year: new Date().getFullYear(),
     category: '',
     merchant: '',
   },
@@ -105,6 +105,22 @@ const expenseReducer = (state, action) => {
 export const ExpenseProvider = ({ children }) => {
   const [state, dispatch] = useReducer(expenseReducer, initialState);
 
+  // Generate a per-device user id (no-auth demo). For real privacy, enable Firebase Auth.
+  const getOrInitUserId = () => {
+    try {
+      const key = 'ss_user_id';
+      let id = localStorage.getItem(key);
+      if (!id) {
+        id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        localStorage.setItem(key, id);
+      }
+      return id;
+    } catch {
+      return 'default-user';
+    }
+  };
+  const currentUserId = getOrInitUserId();
+
   // Fetch expenses with filters (memoized to keep stable identity)
   const fetchExpenses = useCallback(
     async (filters, page = 1) => {
@@ -112,9 +128,7 @@ export const ExpenseProvider = ({ children }) => {
         dispatch({ type: 'SET_LOADING', payload: true });
 
         const itemsPerPage = state.pagination.itemsPerPage;
-        const userId = 'default-user';
-
-        const constraints = [where('userId', '==', userId)];
+        const constraints = [where('userId', '==', currentUserId)];
         // Date range
         if (filters?.year) {
           const year = Number(filters.year);
@@ -171,7 +185,7 @@ export const ExpenseProvider = ({ children }) => {
         date: new Date(expenseData.date || Date.now()),
         merchant: expenseData.merchant,
         category: expenseData.category,
-        userId: 'default-user',
+        userId: currentUserId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -309,12 +323,12 @@ export const ExpenseProvider = ({ children }) => {
         while (iterNext <= now) {
           const iso = new Date(iterNext).toISOString().slice(0,10); // YYYY-MM-DD
           const expenseId = `${sub._id}_${iso}`;
-          const expenseData = {
+      const expenseData = {
             _id: expenseId,
             subscriptionId: sub._id,
             generated: true,
             period: iso,
-            userId: 'default-user',
+        userId: currentUserId,
             merchant: sub.merchant,
             amount: Number(sub.amount || 0),
             category: sub.category || 'Other',
