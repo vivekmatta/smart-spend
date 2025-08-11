@@ -150,7 +150,18 @@ export const ExpenseProvider = ({ children }) => {
 
         const q = fsQuery(collection(db, 'expenses'), ...constraints, orderBy('date', 'desc'));
         const snap = await getDocs(q);
-        const all = snap.docs.map(d => ({ _id: d.id, ...d.data() }));
+        const all = snap.docs.map(d => {
+          const raw = d.data();
+          let dateVal = raw.date;
+          if (dateVal && typeof dateVal.toDate === 'function') {
+            dateVal = dateVal.toDate();
+          } else if (dateVal && dateVal.seconds) {
+            dateVal = new Date(dateVal.seconds * 1000);
+          } else if (!(dateVal instanceof Date)) {
+            dateVal = new Date(dateVal || Date.now());
+          }
+          return { _id: d.id, ...raw, date: dateVal };
+        });
 
         // Client-side pagination for simplicity
         const totalItems = all.length;
