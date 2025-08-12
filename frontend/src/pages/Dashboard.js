@@ -75,18 +75,19 @@ const Dashboard = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
           <p className="mt-1 text-sm text-gray-500">
             Track your spending and get AI-powered insights
           </p>
         </div>
-        <div className="mt-4 sm:mt-0 flex flex-wrap items-center gap-2">
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-            className="input w-32"
+            className="input w-44"
             disabled={isAllTime}
           >
             {Array.from({ length: 12 }, (_, i) => i + 1).map(month => (
@@ -98,7 +99,7 @@ const Dashboard = () => {
           <select
             value={selectedYear}
             onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-            className="input w-24"
+            className="input w-28"
             disabled={isAllTime}
           >
             {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(year => (

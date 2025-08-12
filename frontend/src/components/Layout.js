@@ -70,6 +70,23 @@ const Layout = ({ children }) => {
               );
             })}
           </nav>
+
+          {/* Sidebar footer */}
+          <div className="border-t border-gray-200 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-sm text-gray-500">
+                <BarChart3 className="h-4 w-4" />
+                <span>AI-Powered Insights</span>
+              </div>
+              {user ? (
+                <button onClick={handleSignOut} className="text-sm text-gray-600 hover:text-danger-600 flex items-center">
+                  <LogOut className="h-4 w-4 mr-1" /> Sign out
+                </button>
+              ) : (
+                <Link to="/welcome" onClick={() => setSidebarOpen(false)} className="text-sm text-primary-600 hover:underline">Sign in</Link>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -133,28 +150,24 @@ const Layout = ({ children }) => {
             <Menu className="h-6 w-6" />
           </button>
 
-          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-            <div className="flex flex-1 items-center justify-end gap-x-4 lg:gap-x-6">
-              <div className="flex items-center space-x-2">
-                <TrendingUp className="h-5 w-5 text-primary-600" />
-                <span className="text-sm font-medium text-gray-700">Smart Analytics</span>
-              </div>
-
-              <div className="h-6 w-px bg-gray-200" />
-
-              {user ? (
-                <div className="flex items-center space-x-3">
-                  <div className="text-sm text-gray-700">
-                    {user.displayName || user.email}
-                  </div>
-                  <button onClick={handleSignOut} className="btn btn-ghost text-sm">
-                    <LogOut className="mr-2 h-4 w-4" /> Sign out
-                  </button>
-                </div>
-              ) : (
-                <Link to="/welcome" className="btn btn-primary text-sm">Sign in</Link>
-              )}
+          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6 justify-end items-center">
+            <div className="hidden sm:flex items-center space-x-2 mr-auto">
+              <TrendingUp className="h-5 w-5 text-primary-600" />
+              <span className="text-sm font-medium text-gray-700">Smart Analytics</span>
             </div>
+
+            {user ? (
+              <div className="flex items-center space-x-3">
+                <div className="text-sm text-gray-700">
+                  {user.displayName || user.email}
+                </div>
+                <button onClick={handleSignOut} className="btn btn-ghost text-sm">
+                  <LogOut className="mr-2 h-4 w-4" /> Sign out
+                </button>
+              </div>
+            ) : (
+              <Link to="/welcome" className="btn btn-primary text-sm">Sign in</Link>
+            )}
           </div>
         </div>
 
