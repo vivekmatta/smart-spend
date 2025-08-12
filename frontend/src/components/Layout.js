@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Home, 
   Receipt, 
@@ -8,12 +8,16 @@ import {
   X, 
   TrendingUp, 
   DollarSign,
-  BarChart3
+  BarChart3,
+  LogOut
 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 const Layout = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Home },
@@ -22,6 +26,11 @@ const Layout = ({ children }) => {
   ];
 
   const isActive = (path) => location.pathname === path;
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/welcome');
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -95,9 +104,18 @@ const Layout = ({ children }) => {
           
           {/* Sidebar footer */}
           <div className="border-t border-gray-200 p-4">
-            <div className="flex items-center space-x-2 text-sm text-gray-500">
-              <BarChart3 className="h-4 w-4" />
-              <span>AI-Powered Insights</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 text-sm text-gray-500">
+                <BarChart3 className="h-4 w-4" />
+                <span>AI-Powered Insights</span>
+              </div>
+              {user ? (
+                <button onClick={handleSignOut} className="text-sm text-gray-600 hover:text-danger-600 flex items-center">
+                  <LogOut className="h-4 w-4 mr-1" /> Sign out
+                </button>
+              ) : (
+                <Link to="/welcome" className="text-sm text-primary-600 hover:underline">Sign in</Link>
+              )}
             </div>
           </div>
         </div>
@@ -121,6 +139,21 @@ const Layout = ({ children }) => {
                 <TrendingUp className="h-5 w-5 text-primary-600" />
                 <span className="text-sm font-medium text-gray-700">Smart Analytics</span>
               </div>
+
+              <div className="h-6 w-px bg-gray-200" />
+
+              {user ? (
+                <div className="flex items-center space-x-3">
+                  <div className="text-sm text-gray-700">
+                    {user.displayName || user.email}
+                  </div>
+                  <button onClick={handleSignOut} className="btn btn-ghost text-sm">
+                    <LogOut className="mr-2 h-4 w-4" /> Sign out
+                  </button>
+                </div>
+              ) : (
+                <Link to="/welcome" className="btn btn-primary text-sm">Sign in</Link>
+              )}
             </div>
           </div>
         </div>

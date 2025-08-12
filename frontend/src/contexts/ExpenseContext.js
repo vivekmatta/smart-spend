@@ -14,6 +14,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import toast from 'react-hot-toast';
+import { useAuth } from './AuthContext';
 
 const ExpenseContext = createContext();
 
@@ -104,27 +105,14 @@ const expenseReducer = (state, action) => {
 
 export const ExpenseProvider = ({ children }) => {
   const [state, dispatch] = useReducer(expenseReducer, initialState);
-
-  // Generate a per-device user id (no-auth demo). For real privacy, enable Firebase Auth.
-  const getOrInitUserId = () => {
-    try {
-      const key = 'ss_user_id';
-      let id = localStorage.getItem(key);
-      if (!id) {
-        id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        localStorage.setItem(key, id);
-      }
-      return id;
-    } catch {
-      return 'default-user';
-    }
-  };
-  const currentUserId = getOrInitUserId();
+  const { user } = useAuth();
+  const currentUserId = user?.uid || null;
 
   // Fetch expenses with filters (memoized to keep stable identity)
   const fetchExpenses = useCallback(
     async (filters, page = 1) => {
       try {
+        if (!currentUserId) return; // not signed in yet
         dispatch({ type: 'SET_LOADING', payload: true });
 
         const itemsPerPage = state.pagination.itemsPerPage;
@@ -181,12 +169,12 @@ export const ExpenseProvider = ({ children }) => {
         toast.error('Failed to fetch expenses');
       }
     },
-    // Keep dependencies minimal so the function identity is stable across renders
-    [state.pagination.itemsPerPage]
+    [state.pagination.itemsPerPage, currentUserId]
   );
 
   // Add new expense
   const addExpense = async (expenseData) => {
+    if (!currentUserId) throw new Error('You must be signed in');
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
 
@@ -215,6 +203,7 @@ export const ExpenseProvider = ({ children }) => {
 
   // Update expense
   const updateExpense = async (id, expenseData) => {
+    if (!currentUserId) throw new Error('You must be signed in');
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
 
@@ -241,6 +230,7 @@ export const ExpenseProvider = ({ children }) => {
 
   // Delete expense
   const deleteExpense = async (id) => {
+    if (!currentUserId) throw new Error('You must be signed in');
     try {
       dispatch({ type: 'SET_LOADING', payload: true });
       await deleteDoc(doc(db, 'expenses', id));
@@ -255,6 +245,7 @@ export const ExpenseProvider = ({ children }) => {
 
   // --- Subscriptions ---
   const addSubscription = async (subData) => {
+    if (!currentUserId) throw new Error('You must be signed in');
     const now = new Date();
     const start = subData.subStartDate ? new Date(subData.subStartDate) : now;
     const interval = subData.interval || 'monthly'; // 'monthly' | 'weekly' | 'yearly'
@@ -294,7 +285,7 @@ export const ExpenseProvider = ({ children }) => {
     }
 
     const payload = {
-      userId: 'default-user',
+      userId: currentUserId,
       merchant: subData.merchant,
       amount: Number(subData.amount),
       category: subData.category,
@@ -311,11 +302,13 @@ export const ExpenseProvider = ({ children }) => {
   };
 
   const cancelSubscription = async (id) => {
+    if (!currentUserId) throw new Error('You must be signed in');
     await updateDoc(doc(db, 'subscriptions', id), { active: false, updatedAt: serverTimestamp() });
     toast.success('Subscription cancelled');
   };
 
   const runSubscriptionGenerator = async () => {
+    if (!currentUserId) return;
     try {
       const now = new Date();
       const q = fsQuery(
@@ -334,12 +327,12 @@ export const ExpenseProvider = ({ children }) => {
         while (iterNext <= now) {
           const iso = new Date(iterNext).toISOString().slice(0,10); // YYYY-MM-DD
           const expenseId = `${sub._id}_${iso}`;
-      const expenseData = {
+          const expenseData = {
             _id: expenseId,
             subscriptionId: sub._id,
             generated: true,
             period: iso,
-        userId: currentUserId,
+            userId: currentUserId,
             merchant: sub.merchant,
             amount: Number(sub.amount || 0),
             category: sub.category || 'Other',
@@ -376,6 +369,7 @@ export const ExpenseProvider = ({ children }) => {
 
   // Fetch summary data
   const fetchSummary = async (month = null, year = undefined) => {
+    if (!currentUserId) return;
     try {
       // Load matching expenses, then aggregate client-side
       const constraints = [where('userId', '==', currentUserId)];
@@ -454,12 +448,10 @@ export const ExpenseProvider = ({ children }) => {
     dispatch({ type: 'SET_FILTERS', payload: filters });
   };
 
-  // Remove duplicate initial fetch here; the `Expenses` page controls fetching
-  // to avoid double requests and dependency loops.
   useEffect(() => {
     // Run subscription generator once per load
     runSubscriptionGenerator();
-  }, []);
+  }, [currentUserId]);
 
   const value = {
     ...state,
