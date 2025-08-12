@@ -26,6 +26,7 @@ const Layout = ({ children }) => {
   ];
 
   const isActive = (path) => location.pathname === path;
+  const isAuthPage = location.pathname.startsWith('/welcome');
 
   const handleSignOut = async () => {
     await signOut();
@@ -83,7 +84,9 @@ const Layout = ({ children }) => {
                   <LogOut className="h-4 w-4 mr-1" /> Sign out
                 </button>
               ) : (
-                <Link to="/welcome" onClick={() => setSidebarOpen(false)} className="text-sm text-primary-600 hover:underline">Sign in</Link>
+                !isAuthPage ? (
+                  <Link to="/welcome" onClick={() => setSidebarOpen(false)} className="text-sm text-primary-600 hover:underline">Sign in</Link>
+                ) : null
               )}
             </div>
           </div>
@@ -131,7 +134,9 @@ const Layout = ({ children }) => {
                   <LogOut className="h-4 w-4 mr-1" /> Sign out
                 </button>
               ) : (
-                <Link to="/welcome" className="text-sm text-primary-600 hover:underline">Sign in</Link>
+                !isAuthPage ? (
+                  <Link to="/welcome" className="text-sm text-primary-600 hover:underline">Sign in</Link>
+                ) : null
               )}
             </div>
           </div>
@@ -166,7 +171,9 @@ const Layout = ({ children }) => {
                 </button>
               </div>
             ) : (
-              <Link to="/welcome" className="btn btn-primary text-sm">Sign in</Link>
+              !isAuthPage ? (
+                <Link to="/welcome" className="btn btn-primary text-sm">Sign in</Link>
+              ) : null
             )}
           </div>
         </div>
