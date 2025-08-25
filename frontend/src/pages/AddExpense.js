@@ -1,30 +1,28 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { useExpenses } from '../contexts/ExpenseContext';
 import { 
   Save, 
-  Sparkles, 
   Calendar, 
   DollarSign, 
   Store, 
   FileText,
-  Loader2
+  Loader2,
+  Repeat,
+  Clock
 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const AddExpense = () => {
   const navigate = useNavigate();
-  const { addExpense, addSubscription, categorizeExpense } = useExpenses();
-  const [isCategorizing, setIsCategorizing] = useState(false);
-  const [categorizedCategory, setCategorizedCategory] = useState('');
-  const [categorizationConfidence, setCategorizationConfidence] = useState(0);
+  const { addExpense } = useExpenses();
+  const [isSubscription, setIsSubscription] = useState(false);
 
   const {
     register,
     handleSubmit,
     watch,
-    setValue,
     formState: { errors, isSubmitting }
   } = useForm({
     defaultValues: {
@@ -32,68 +30,56 @@ const AddExpense = () => {
       description: '',
       merchant: '',
       category: '',
-      date: format(new Date(), 'yyyy-MM-dd')
+      date: format(new Date(), 'yyyy-MM-dd'),
+      isSubscription: false,
+      subscriptionFrequency: 'monthly'
     }
   });
 
-  const description = watch('description');
-
-  // Auto-categorize when description changes
-  useEffect(() => {
-    const categorizeDescription = async () => {
-      if (description && description.length > 3) {
-        setIsCategorizing(true);
-        try {
-          const result = await categorizeExpense(description);
-          setCategorizedCategory(result.category);
-          setCategorizationConfidence(result.confidence);
-          
-          // Auto-fill category if confidence is high enough
-          if (result.confidence > 0.6) {
-            setValue('category', result.category);
-          }
-        } catch (error) {
-          console.error('Categorization failed:', error);
-        } finally {
-          setIsCategorizing(false);
-        }
-      } else {
-        setCategorizedCategory('');
-        setCategorizationConfidence(0);
-      }
-    };
-
-    const timeoutId = setTimeout(categorizeDescription, 1000);
-    return () => clearTimeout(timeoutId);
-  }, [description, setValue, categorizeExpense]);
+  const watchedIsSubscription = watch('isSubscription');
 
   const onSubmit = async (data) => {
     try {
+      const expenseData = {
+        ...data,
+        amount: parseFloat(data.amount),
+        date: new Date(data.date),
+        isSubscription: data.isSubscription || false
+      };
+
+      // Add subscription-specific fields if it's a subscription
       if (data.isSubscription) {
-        await addSubscription({
-          amount: parseFloat(data.amount),
-          description: data.description,
-          merchant: data.merchant,
-          category: data.category,
-          subDayOfMonth: data.subDayOfMonth,
-          subStartDate: data.subStartDate,
-          interval: data.interval,
-        });
-        // Also save an immediate expense for today so user sees it instantly
-        await addExpense({
-          amount: parseFloat(data.amount),
-          description: `${data.description} (first charge)`,
-          merchant: data.merchant,
-          category: data.category,
-          date: new Date(),
-        });
-      } else {
-        await addExpense({
-          ...data,
-          amount: parseFloat(data.amount),
-          date: new Date(data.date)
-        });
+        expenseData.subscriptionFrequency = data.subscriptionFrequency;
+        expenseData.subscriptionStartDate = new Date(data.date);
+        
+        // Calculate the next due date based on frequency
+        const startDate = new Date(data.date);
+        let nextDueDate = new Date(startDate);
+        
+        switch (data.subscriptionFrequency) {
+          case 'weekly':
+            nextDueDate.setDate(startDate.getDate() + 7);
+            break;
+          case 'biweekly':
+            nextDueDate.setDate(startDate.getDate() + 14);
+            break;
+          case 'monthly':
+            nextDueDate.setMonth(startDate.getMonth() + 1);
+            break;
+          case 'quarterly':
+            nextDueDate.setMonth(startDate.getMonth() + 3);
+            break;
+          case 'yearly':
+            nextDueDate.setFullYear(startDate.getFullYear() + 1);
+            break;
+          default:
+            nextDueDate.setMonth(startDate.getMonth() + 1);
+        }
+        
+        expenseData.nextDueDate = nextDueDate;
       }
+
+      await addExpense(expenseData);
       navigate('/expenses');
     } catch (error) {
       console.error('Failed to add expense:', error);
@@ -116,24 +102,20 @@ const AddExpense = () => {
     'Other'
   ];
 
-  const getConfidenceColor = (confidence) => {
-    if (confidence > 0.8) return 'text-success-600';
-    if (confidence > 0.6) return 'text-warning-600';
-    return 'text-danger-600';
-  };
-
-  const getConfidenceText = (confidence) => {
-    if (confidence > 0.8) return 'High';
-    if (confidence > 0.6) return 'Medium';
-    return 'Low';
-  };
+  const subscriptionFrequencies = [
+    { value: 'weekly', label: 'Weekly', description: 'Every week' },
+    { value: 'biweekly', label: 'Bi-weekly', description: 'Every 2 weeks' },
+    { value: 'monthly', label: 'Monthly', description: 'Every month' },
+    { value: 'quarterly', label: 'Quarterly', description: 'Every 3 months' },
+    { value: 'yearly', label: 'Yearly', description: 'Every year' }
+  ];
 
   return (
     <div className="max-w-2xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Add New Expense</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Track your spending with AI-powered categorization
+          Track your spending and manage your budget
         </p>
       </div>
 
@@ -186,28 +168,9 @@ const AddExpense = () => {
                   className="input pl-10"
                   placeholder="e.g., Coffee at Starbucks"
                 />
-                {isCategorizing && (
-                  <div className="absolute inset-y-0 right-0 pr-3 flex items-center">
-                    <Loader2 className="h-5 w-5 text-primary-600 animate-spin" />
-                  </div>
-                )}
               </div>
               {errors.description && (
                 <p className="mt-1 text-sm text-danger-600">{errors.description.message}</p>
-              )}
-              
-              {/* AI Categorization Result */}
-              {categorizedCategory && (
-                <div className="mt-2 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <div className="flex items-center space-x-2">
-                    <Sparkles className="h-4 w-4 text-primary-600" />
-                    <span className="text-sm font-medium text-gray-700">AI Suggestion:</span>
-                    <span className="text-sm text-gray-900">{categorizedCategory}</span>
-                    <span className={`text-xs ${getConfidenceColor(categorizationConfidence)}`}>
-                      ({getConfidenceText(categorizationConfidence)} confidence: {(categorizationConfidence * 100).toFixed(0)}%)
-                    </span>
-                  </div>
-                </div>
               )}
             </div>
 
@@ -279,30 +242,55 @@ const AddExpense = () => {
               )}
             </div>
 
-            {/* Subscription Options */}
-            <div className="border-t pt-4">
-              <label className="flex items-center space-x-2">
-                <input type="checkbox" {...register('isSubscription')} />
-                <span className="text-sm text-gray-700">Make this a subscription</span>
-              </label>
+            {/* Subscription Toggle */}
+            <div className="border-t pt-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <input
+                  type="checkbox"
+                  id="isSubscription"
+                  {...register('isSubscription')}
+                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                />
+                <label htmlFor="isSubscription" className="flex items-center space-x-2 text-sm font-medium text-gray-700">
+                  <Repeat className="h-4 w-4 text-primary-600" />
+                  <span>This is a recurring subscription</span>
+                </label>
+              </div>
 
-              {watch('isSubscription') && (
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Subscription Fields */}
+              {watchedIsSubscription && (
+                <div className="space-y-4 p-4 bg-gray-50 rounded-lg border">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Clock className="h-4 w-4 text-primary-600" />
+                    <span className="text-sm font-medium text-gray-700">Subscription Details</span>
+                  </div>
+                  
+                  {/* Frequency */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Interval</label>
-                    <select className="input" defaultValue="monthly" {...register('interval')}> 
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                      <option value="yearly">Yearly</option>
+                    <label htmlFor="subscriptionFrequency" className="block text-sm font-medium text-gray-700 mb-2">
+                      Billing Frequency
+                    </label>
+                    <select
+                      id="subscriptionFrequency"
+                      {...register('subscriptionFrequency')}
+                      className="input"
+                    >
+                      {subscriptionFrequencies.map((freq) => (
+                        <option key={freq.value} value={freq.value}>
+                          {freq.label} - {freq.description}
+                        </option>
+                      ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Day of month</label>
-                    <input type="number" min="1" max="31" className="input" defaultValue={new Date().getDate()} {...register('subDayOfMonth')} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Start date</label>
-                    <input type="date" className="input" defaultValue={format(new Date(), 'yyyy-MM-dd')} {...register('subStartDate')} />
+
+                  {/* Next Due Date Info */}
+                  <div className="p-3 bg-blue-100 rounded-lg border border-blue-200">
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm text-blue-800 font-medium">
+                        Next due date will be calculated automatically based on the frequency
+                      </span>
+                    </div>
                   </div>
                 </div>
               )}
@@ -330,9 +318,9 @@ const AddExpense = () => {
                 ) : (
                   <>
                     <Save className="mr-2 h-4 w-4" />
-                    Save Expense
+                    Save {watchedIsSubscription ? 'Subscription' : 'Expense'}
                   </>
-                )}
+                  )}
               </button>
             </div>
           </form>
@@ -342,14 +330,16 @@ const AddExpense = () => {
       {/* Tips */}
       <div className="mt-6 card">
         <div className="card-header">
-          <h3 className="text-lg font-semibold text-gray-900">💡 Tips for Better Categorization</h3>
+          <h3 className="text-lg font-semibold text-gray-900">💡 Tips for Better Tracking</h3>
         </div>
         <div className="card-body">
           <ul className="space-y-2 text-sm text-gray-600">
             <li>• Be specific in your descriptions (e.g., "Coffee at Starbucks" vs "Coffee")</li>
-            <li>• Include the merchant name in the description for better accuracy</li>
-            <li>• The AI learns from your corrections - feel free to adjust categories</li>
-            <li>• Use consistent naming for similar expenses</li>
+            <li>• Include the merchant name for better organization</li>
+            <li>• Use consistent categories for similar expenses</li>
+            <li>• Track expenses regularly to stay on top of your budget</li>
+            <li>• Mark recurring expenses as subscriptions for better budget planning</li>
+            <li>• Set accurate next due dates for subscriptions to avoid late fees</li>
           </ul>
         </div>
       </div>

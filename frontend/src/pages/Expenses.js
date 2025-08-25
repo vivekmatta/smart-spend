@@ -12,9 +12,70 @@ import {
   Calendar,
   DollarSign,
   Store,
-  Tag
+  Tag,
+  Repeat,
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
+
+// Helper function to safely convert Firebase Timestamps to Date objects
+const safeFormatDate = (dateValue, formatString = 'MMM dd, yyyy') => {
+  try {
+    let date;
+    if (dateValue && typeof dateValue === 'object' && dateValue.toDate) {
+      // Firebase Timestamp
+      date = dateValue.toDate();
+    } else if (dateValue instanceof Date) {
+      // Already a Date object
+      date = dateValue;
+    } else if (dateValue) {
+      // String or number, try to create Date
+      date = new Date(dateValue);
+    } else {
+      return 'Invalid date';
+    }
+    
+    // Check if date is valid
+    if (isNaN(date.getTime())) {
+      return 'Invalid date';
+    }
+    
+    return format(date, formatString);
+  } catch (error) {
+    console.error('Error formatting date:', error, dateValue);
+    return 'Invalid date';
+  }
+};
+
+// Helper function to get subscription frequency display text
+const getSubscriptionFrequencyText = (frequency) => {
+  const frequencyMap = {
+    'weekly': 'Weekly',
+    'biweekly': 'Bi-weekly', 
+    'monthly': 'Monthly',
+    'quarterly': 'Quarterly',
+    'yearly': 'Yearly'
+  };
+  return frequencyMap[frequency] || frequency;
+};
+
+// Helper function to check if subscription is overdue
+const isSubscriptionOverdue = (nextDueDate) => {
+  if (!nextDueDate) return false;
+  const dueDate = nextDueDate.toDate ? nextDueDate.toDate() : new Date(nextDueDate);
+  return dueDate < new Date();
+};
+
+// Helper function to get days until due
+const getDaysUntilDue = (nextDueDate) => {
+  if (!nextDueDate) return null;
+  const dueDate = nextDueDate.toDate ? nextDueDate.toDate() : new Date(nextDueDate);
+  const today = new Date();
+  const diffTime = dueDate - today;
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  return diffDays;
+};
 
 const Expenses = () => {
   const { 
@@ -24,14 +85,17 @@ const Expenses = () => {
     filters, 
     fetchExpenses, 
     deleteExpense, 
-    setFilters 
+    setFilters,
+    updateExpense,
+    addExpense
   } = useExpenses();
 
   const [localFilters, setLocalFilters] = useState({
     month: filters.month || '',
     year: filters.year || 2024,
     category: filters.category || '',
-    merchant: filters.merchant || ''
+    merchant: filters.merchant || '',
+    subscriptionType: filters.subscriptionType || ''
   });
 
   const categories = [
@@ -67,10 +131,104 @@ const Expenses = () => {
       month: '',
       year: 2024,
       category: '',
-      merchant: ''
+      merchant: '',
+      subscriptionType: ''
     };
     setLocalFilters(clearedFilters);
     setFilters(clearedFilters);
+  };
+
+  const handleMarkAsPaid = async (expense) => {
+    if (!expense.isSubscription) return;
+    
+    try {
+      // Calculate next due date based on frequency
+      const currentDueDate = expense.nextDueDate?.toDate ? expense.nextDueDate.toDate() : new Date(expense.nextDueDate);
+      let nextDueDate = new Date(currentDueDate);
+      
+      switch (expense.subscriptionFrequency) {
+        case 'weekly':
+          nextDueDate.setDate(nextDueDate.getDate() + 7);
+          break;
+        case 'biweekly':
+          nextDueDate.setDate(nextDueDate.getDate() + 14);
+          break;
+        case 'monthly':
+          nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+          break;
+        case 'quarterly':
+          nextDueDate.setMonth(nextDueDate.getMonth() + 3);
+          break;
+        case 'yearly':
+          nextDueDate.setFullYear(nextDueDate.getFullYear() + 1);
+          break;
+        default:
+          nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      }
+
+      // Create a new expense record for the payment
+      const newExpense = {
+        ...expense,
+        date: new Date(),
+        nextDueDate: nextDueDate,
+        id: undefined // Remove ID so it creates a new document
+      };
+
+      // Update the original subscription with new due date
+      await updateExpense({
+        ...expense,
+        nextDueDate: nextDueDate
+      });
+
+      // Add the new payment record
+      await addExpense(newExpense);
+      
+      // Refresh the expenses list
+      fetchExpenses(filters, pagination.currentPage);
+    } catch (error) {
+      console.error('Error marking subscription as paid:', error);
+    }
+  };
+
+  const handleFixOverdueSubscription = async (expense) => {
+    if (!expense.isSubscription) return;
+    
+    try {
+      // Calculate a new due date from today based on frequency
+      const today = new Date();
+      let nextDueDate = new Date(today);
+      
+      switch (expense.subscriptionFrequency) {
+        case 'weekly':
+          nextDueDate.setDate(today.getDate() + 7);
+          break;
+        case 'biweekly':
+          nextDueDate.setDate(today.getDate() + 14);
+          break;
+        case 'monthly':
+          nextDueDate.setMonth(today.getMonth() + 1);
+          break;
+        case 'quarterly':
+          nextDueDate.setMonth(today.getMonth() + 3);
+          break;
+        case 'yearly':
+          nextDueDate.setFullYear(today.getFullYear() + 1);
+          break;
+        default:
+          nextDueDate.setMonth(today.getMonth() + 1);
+      }
+
+      // Update the subscription with new due date
+      await updateExpense({
+        ...expense,
+        nextDueDate: nextDueDate
+      });
+      
+      // Refresh the expenses list
+      fetchExpenses(filters, pagination.currentPage);
+    } catch (error) {
+      console.error('Error fixing overdue subscription:', error);
+    }
   };
 
   const handlePageChange = (page) => {
@@ -201,6 +359,20 @@ const Expenses = () => {
                 placeholder="Search merchants..."
               />
             </div>
+
+            {/* Subscription Type */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Subscription Type</label>
+              <select
+                value={localFilters.subscriptionType}
+                onChange={(e) => handleFilterChange('subscriptionType', e.target.value)}
+                className="input"
+              >
+                <option value="">All Expenses</option>
+                <option value="subscription">Subscriptions Only</option>
+                <option value="one-time">One-time Expenses Only</option>
+              </select>
+            </div>
           </div>
 
           <div className="flex justify-end space-x-3 mt-4">
@@ -245,7 +417,7 @@ const Expenses = () => {
       ) : expenses.length > 0 ? (
         <div className="space-y-4">
           {expenses.map((expense) => (
-            <div key={expense._id} className="card hover:shadow-medium transition-shadow">
+            <div key={expense.id} className="card hover:shadow-medium transition-shadow">
               <div className="card-body">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
@@ -261,6 +433,12 @@ const Expenses = () => {
                           <span className={`badge ${getCategoryColor(expense.category)}`}>
                             {expense.category}
                           </span>
+                          {expense.isSubscription && (
+                            <span className="badge bg-blue-100 text-blue-800 border-blue-200">
+                              <Repeat className="h-3 w-3 mr-1" />
+                              Subscription
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center space-x-4 mt-1 text-sm text-gray-500">
                           <div className="flex items-center space-x-1">
@@ -269,9 +447,73 @@ const Expenses = () => {
                           </div>
                           <div className="flex items-center space-x-1">
                             <Calendar className="h-4 w-4" />
-                            <span>{format(new Date(expense.date), 'MMM dd, yyyy')}</span>
+                            <span>{safeFormatDate(expense.date)}</span>
                           </div>
                         </div>
+                        
+                        {/* Subscription Details */}
+                        {expense.isSubscription && (
+                          <div className="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Clock className="h-4 w-4 text-blue-600" />
+                              <span className="text-sm font-medium text-blue-800">
+                                {getSubscriptionFrequencyText(expense.subscriptionFrequency)} Subscription
+                              </span>
+                            </div>
+                            
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center space-x-4 text-sm">
+                                <div className="flex items-center space-x-1">
+                                  <Calendar className="h-3 w-3 text-blue-600" />
+                                  <span className="text-blue-700">
+                                    Next due: {safeFormatDate(expense.nextDueDate)}
+                                  </span>
+                                </div>
+                                
+                                {expense.subscriptionStartDate && (
+                                  <div className="flex items-center space-x-1">
+                                    <Clock className="h-3 w-3 text-blue-600" />
+                                    <span className="text-blue-700">
+                                      Started: {safeFormatDate(expense.subscriptionStartDate)}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                              
+                              {/* Subscription Status */}
+                              <div className="flex items-center space-x-2">
+                                {isSubscriptionOverdue(expense.nextDueDate) ? (
+                                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                    <AlertCircle className="h-3 w-3 mr-1" />
+                                    Overdue
+                                  </span>
+                                ) : (
+                                  (() => {
+                                    const daysUntilDue = getDaysUntilDue(expense.nextDueDate);
+                                    if (daysUntilDue !== null) {
+                                      if (daysUntilDue <= 7) {
+                                        return (
+                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                                            <Clock className="h-3 w-3 mr-1" />
+                                            Due in {daysUntilDue} day{daysUntilDue !== 1 ? 's' : ''}
+                                          </span>
+                                        );
+                                      } else {
+                                        return (
+                                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                            <Clock className="h-3 w-3 mr-1" />
+                                            Due in {daysUntilDue} days
+                                          </span>
+                                        );
+                                      }
+                                    }
+                                    return null;
+                                  })()
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -280,8 +522,33 @@ const Expenses = () => {
                       <p className="text-xl font-bold text-gray-900">
                         {formatCurrency(expense.amount)}
                       </p>
+                      {expense.isSubscription && (
+                        <p className="text-sm text-blue-600 font-medium">
+                          {getSubscriptionFrequencyText(expense.subscriptionFrequency)}
+                        </p>
+                      )}
                     </div>
                     <div className="flex space-x-1">
+                                              {expense.isSubscription && (
+                          <>
+                            <button
+                              onClick={() => handleMarkAsPaid(expense)}
+                              className="p-2 text-gray-400 hover:text-green-600 transition-colors"
+                              title="Mark subscription as paid"
+                            >
+                              <DollarSign className="h-4 w-4" />
+                            </button>
+                            {isSubscriptionOverdue(expense.nextDueDate) && (
+                              <button
+                                onClick={() => handleFixOverdueSubscription(expense)}
+                                className="p-2 text-gray-400 hover:text-blue-600 transition-colors"
+                                title="Fix overdue subscription date"
+                              >
+                                <Clock className="h-4 w-4" />
+                              </button>
+                            )}
+                          </>
+                        )}
                       <button
                         onClick={() => {/* TODO: Implement edit */}}
                         className="p-2 text-gray-400 hover:text-primary-600 transition-colors"
@@ -290,7 +557,7 @@ const Expenses = () => {
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(expense._id)}
+                        onClick={() => handleDelete(expense.id)}
                         className="p-2 text-gray-400 hover:text-danger-600 transition-colors"
                         title="Delete expense"
                       >

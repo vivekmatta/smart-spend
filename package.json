@@ -1,19 +1,20 @@
 {
   "name": "smart-spend",
   "version": "1.0.0",
-  "description": "A modern expense tracking app with ML-powered categorization",
+  "description": "AI-powered expense tracking and budget management application",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "cd backend && npm run dev",
-    "client": "cd frontend && npm start",
+    "start": "cd backend && npm start",
+    "frontend": "cd frontend && npm start",
+    "backend": "cd backend && npm start",
+    "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
     "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
-    "build": "cd frontend && npm run build",
-    "start": "cd backend && npm start"
+    "seed": "cd backend && node scripts/seedBudgets.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["expense-tracker", "react", "nodejs", "ml", "mongodb"],
-  "author": "SmartSpend Team",
-  "license": "MIT",
+  "keywords": ["expense", "budget", "finance", "ai", "tracking"],
+  "author": "",
+  "license": "ISC",
   "devDependencies": {
     "concurrently": "^8.2.2"
   }

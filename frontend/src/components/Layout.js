@@ -9,7 +9,8 @@ import {
   TrendingUp, 
   DollarSign,
   BarChart3,
-  LogOut
+  LogOut,
+  Target
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -22,6 +23,7 @@ const Layout = ({ children }) => {
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Home },
     { name: 'Expenses', href: '/expenses', icon: Receipt },
+    { name: 'Budgets', href: '/budgets', icon: Target },
     { name: 'Add Expense', href: '/add', icon: Plus },
   ];
 

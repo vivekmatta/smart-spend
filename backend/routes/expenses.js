@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
       sortOrder = 'desc'
     } = req.query;
 
-    const userId = 'default-user'; // In production, get from auth middleware
+    const userId = req.user.uid; // Get from authenticated user
     const query = { userId };
 
     // Date filtering
@@ -66,7 +66,7 @@ router.get('/', async (req, res) => {
 // Get expense by ID
 router.get('/:id', async (req, res) => {
   try {
-    const expense = await Expense.findById(req.params.id);
+    const expense = await Expense.findOne({ _id: req.params.id, userId: req.user.uid });
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' });
     }
@@ -87,7 +87,7 @@ router.post('/', async (req, res) => {
       date: date || new Date(),
       merchant,
       category,
-      userId: 'default-user'
+      userId: req.user.uid
     });
 
     const savedExpense = await expense.save();
@@ -105,8 +105,8 @@ router.put('/:id', async (req, res) => {
   try {
     const { amount, description, date, merchant, category } = req.body;
     
-    const expense = await Expense.findByIdAndUpdate(
-      req.params.id,
+    const expense = await Expense.findOneAndUpdate(
+      { _id: req.params.id, userId: req.user.uid },
       { amount, description, date, merchant, category },
       { new: true, runValidators: true }
     );
@@ -127,7 +127,7 @@ router.put('/:id', async (req, res) => {
 // Delete expense
 router.delete('/:id', async (req, res) => {
   try {
-    const expense = await Expense.findByIdAndDelete(req.params.id);
+    const expense = await Expense.findOneAndDelete({ _id: req.params.id, userId: req.user.uid });
     if (!expense) {
       return res.status(404).json({ error: 'Expense not found' });
     }
@@ -141,7 +141,7 @@ router.delete('/:id', async (req, res) => {
 router.get('/summary/categories', async (req, res) => {
   try {
     const { month, year } = req.query;
-    const userId = 'default-user';
+    const userId = req.user.uid;
     const query = { userId };
 
     if (month && year) {
@@ -172,7 +172,7 @@ router.get('/summary/categories', async (req, res) => {
 router.get('/summary/trends', async (req, res) => {
   try {
     const { year } = req.query;
-    const userId = 'default-user';
+    const userId = req.user.uid;
     const query = { userId };
 
     if (year) {
